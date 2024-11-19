@@ -74,6 +74,27 @@ if selected_timezones:
 # Main content
 st.title("Security Analytics Dashboard")
 
+# # Get min and max dates from the data
+# min_date = pd.to_datetime(df['INGESTTIME_HOUR']).min()
+# max_date = pd.to_datetime(df['INGESTTIME_HOUR']).max()
+
+# print(min_date)
+
+# # Create time range selector
+# time_range = st.sidebar.slider(
+#     "Select Time Range",
+#     min_value=min_date,
+#     max_value=max_date,
+#     value=(min_date, max_date),
+#     format="YYYY-MM-DD HH:mm"
+# )
+
+# Filter data based on time range
+# filtered_df = filtered_df[
+#     (df['INGESTTIME_HOUR'] >= time_range[0]) &
+#     (df['INGESTTIME_HOUR'] <= time_range[1])
+# ]
+
 # Top metrics row
 col1, col2, col3, col4 = st.columns(4)
 
@@ -87,36 +108,28 @@ with col2:
 
 with col3:
     total_countries = filtered_df['GEOIP_COUNTRYNAME'].nunique()
-    st.metric("Countries Affected", total_countries)
+    st.metric("Unique Countries", total_countries)
 
 with col4:
-    high_risk_events = filtered_df[[
-        'COUNT_ROOTINGDETECTED', 
-        'COUNT_DEBUGGERDETECTED',
-        'COUNT_TAMPERINGDETECTED'
-    ]].sum().sum()
-    st.metric("High Risk Events", f"{high_risk_events:,}")
+    anomaly_count = filtered_df["IS_ANOMALY"].sum()
+    st.metric("Anomalies Detected", f"{anomaly_count:,}", )
 
 
 # Detailed data section
 st.subheader("Filtered Data")
 event_columns = [col for col in filtered_df.columns if col.startswith('COUNT_')]
-agg_data = filtered_df.groupby(['CUSTOMERID', 'APPID', 'OS'])[event_columns].sum().reset_index()
+agg_data = filtered_df.groupby(['CUSTOMERID', 'APPID', 'OS', "PROTECTEDBUILDIDENTIFIER", "GEOIP_COUNTRYNAME", "GEOIP_TZ"])[event_columns].sum().reset_index()
 st.dataframe(agg_data, height=200)
 
 # Prepare data for multivariate time series plot
 # Convert timestamp to datetime
 filtered_df['INGESTTIME_HOUR'] = pd.to_datetime(filtered_df['INGESTTIME_HOUR'])
+anomaly_df = filtered_df[filtered_df['IS_ANOMALY'] == 1]
 
-# Group by UIDs and timestamp
-uid_cols = ['CUSTOMERID', 'APPID', 'OS', 'PROTECTEDBUILDIDENTIFIER', 'GEOIP_COUNTRYNAME', 'GEOIP_TZ']
 event_cols = [col for col in filtered_df.columns if col.startswith('COUNT_')]
 
-# Create a unique identifier for each combination of UIDs
-filtered_df['UID_COMBO'] = filtered_df[uid_cols].apply(lambda x: '_'.join(x.astype(str)), axis=1)
-
 # Group by timestamp and UID combination
-grouped_df = filtered_df.groupby(['INGESTTIME_HOUR',])[event_cols].sum().reset_index()
+grouped_df = filtered_df.groupby(['INGESTTIME_HOUR'])[event_cols].sum().reset_index()
 
 # Create multivariate plot
 st.subheader("Multivariate Time Series Analysis of Security Events")
@@ -148,9 +161,17 @@ fig.update_layout(
     )
 )
 
+# Add vertical lines at anomaly points
+if not anomaly_df.empty:
+    for anomaly_time in anomaly_df['INGESTTIME_HOUR']:
+        fig.add_vline(
+            x=anomaly_time,
+            line_dash="dash",
+            line_color="red",
+            opacity=0.3,
+        )
+
 st.plotly_chart(fig, use_container_width=True)
-
-
 
 
 # Charts row 1

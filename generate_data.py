@@ -65,6 +65,8 @@ def generate_synthetic_data(num_records=1000):
             # Security events - should be rare
             data[column] = np.random.binomial(n=1, p=0.05, size=num_records)
     
+    data["IS_ANOMALY"] = np.random.binomial(1, 0.05, num_records)
+
     # Create DataFrame
     df = pd.DataFrame(data)
     
